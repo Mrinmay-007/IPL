@@ -10,23 +10,3 @@ def process(delv, mat):
 
     return df
 
-def wickets(df, from_yr, to_yr):
-    wick = (
-        df[
-            (df['season'] >= from_yr) &
-            (df['season'] <= to_yr) &
-            (df['is_wicket'] == 1) &  # Wicket must be taken
-            (df['super_over'] == 'N') &  # Exclude super overs
-            (
-                    (df['dismissal_kind'] != 'run out') |  # Either it's not a run out
-                    ((df['dismissal_kind'] == 'run out') & (df['fielder'] == df['bowler']))
-            )
-            ]
-        .groupby(['bowler', 'season'])['is_wicket']  # Include 'season' in grouping
-        .sum()
-        .reset_index()
-    )
-    return wick
-
-
-

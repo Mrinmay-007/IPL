@@ -62,8 +62,10 @@ def overall_stat(df, from_yr, to_yr):
 
     # Ensure wickets are displayed as integers
     merged_df['is_wicket'] = merged_df['is_wicket'].astype(int)
-    # Filter based on season, not bowler
-    filtered_bowler = merged_df[(merged_df['season'] >= from_yr) & (merged_df['season'] <= to_yr)]
+    # Filter based on season, not bowler. .copy() avoids a SettingWithCopyWarning
+    # (and the risk of silently editing a view instead of a real copy) on the
+    # in-place fillna/rename calls below.
+    filtered_bowler = merged_df[(merged_df['season'] >= from_yr) & (merged_df['season'] <= to_yr)].copy()
 
     # Sort by season and fill missing values
     filtered_bowler.fillna(0, inplace=True)
@@ -138,7 +140,11 @@ def batsman_analysis(df, from_yr, to_yr):
     not_out['Not_out'] = (not_out['Match'] - not_out['Dismissals']).astype(int)
 
     # Step 9: Calculate average (Runs / Dismissals, where dismissals > 0)
-    not_out['Avg'] = (runs['Runs'] / not_out['Dismissals']).replace([float('inf'), 0], 0).round(3)
+    # Guard against divide-by-zero: 0 dismissals gives inf (or NaN when runs are
+    # also 0), and NaN wasn't handled before, so it slipped through to the table.
+    not_out['Avg'] = (runs['Runs'] / not_out['Dismissals']).replace(
+        [float('inf'), float('-inf')], 0
+    ).fillna(0).round(3)
 
     # Step 10: Calculate centuries (100+ runs in a match) and half-centuries (50-99 runs in a match)
     match_runs = df[

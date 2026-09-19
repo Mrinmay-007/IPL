@@ -2,10 +2,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from matplotlib.pyplot import title
 
 import preprocess, func
 from func import overall_stat, year, wickets, batsman_analysis
@@ -113,8 +109,12 @@ if menu == 'Winning-Stat':
     ven.insert(0,'--')
     v=st.selectbox('Select the venue',ven)
     if v != '--':
-
-        x = df[df['venue'] == v].drop_duplicates(subset='match_id')
+        # Match on normalized_venue, not the raw 'venue' string. The same ground
+        # is often recorded under several raw names (e.g. "Eden Gardens" vs
+        # "Eden Gardens, Kolkata"), so filtering on the raw string alone silently
+        # dropped rows and undercounted matches for many major venues.
+        selected_norm = v.lower().split(',')[0].strip()
+        x = df[df['normalized_venue'] == selected_norm].drop_duplicates(subset='match_id')
         m =x.shape[0]
         w= x[(x['toss_winner'] == x['winner'])].shape[0]
         f = x[(x['toss_decision'] == 'field')].shape[0]
@@ -270,29 +270,31 @@ if menu == 'Batsman-Stat':
         (df['batter'] == selected_player) &
         (df['is_wicket'] == 1) &
         (df['season'] >= from_year) & (df['season'] <= to_year)
-        ].groupby('bowler')['is_wicket'].count().sort_values(ascending=False).reset_index()
+        ].groupby('bowler')['is_wicket'].count().reset_index()
 
     # Rename column for clarity
     x = x.rename(columns={'is_wicket': 'Dismissed'})
 
-    # Get runs conceded by bowlers to V Kohli in 2024
+    # Get runs conceded by bowlers to the selected batsman
     y = df[
         (df['batter'] == selected_player) &
         (df['season'] >= from_year) & (df['season'] <= to_year)
-        ].groupby('bowler')['batsman_runs'].sum().sort_values(ascending=False).reset_index()
+        ].groupby('bowler')['batsman_runs'].sum().reset_index()
+    y = y.rename(columns={'batsman_runs': 'Runs'})
 
-    # Get the number of balls bowled to V Kohli, excluding wides and no-balls
+    # Get the number of balls bowled to the selected batsman, excluding wides and no-balls
     z = df[
         (df['batter'] == selected_player) &
         (~df['extras_type'].isin(['wides', 'noballs'])) &
         (df['season'] >= from_year) & (df['season'] <= to_year)
-        ].groupby('bowler')['ball'].count().sort_values(ascending=False).reset_index()
-    z['Strike_Rate'] = ((y['batsman_runs'] / z['ball']) * 100).round(2)
-    # Rename column for clarity
+        ].groupby('bowler')['ball'].count().reset_index()
     z = z.rename(columns={'ball': 'Balls'})
-    y = y.rename(columns={'batsman_runs': 'Runs'})
-    # Merging all DataFrames on the 'bowler' column
+
+    # Merge on 'bowler' FIRST so rows for the same bowler line up, then compute
+    # Strike_Rate. (Previously Runs and Balls were each sorted independently
+    # before dividing, which paired the wrong bowlers' numbers together.)
     res = x.merge(y, on='bowler').merge(z, on='bowler')
+    res['Strike_Rate'] = ((res['Runs'] / res['Balls']) * 100).round(2)
 
     # Show the final result
     res = res.sort_values(by=['Dismissed', 'Strike_Rate'], ascending=[False, True])
